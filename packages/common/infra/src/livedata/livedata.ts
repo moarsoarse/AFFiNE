@@ -446,6 +446,23 @@ export class LiveData<T = unknown>
     ) as any;
   }
 
+  waitFor<S extends T>(predicate: (v: T) => v is S): Promise<S> {
+    return new Promise<S>(resolve => {
+      const subscription = this.subscribe(v => {
+        if (predicate ? predicate(v) : v !== null && v !== undefined) {
+          resolve(v as any);
+          subscription.unsubscribe();
+        }
+      });
+    });
+  }
+
+  waitForNonNull(): Promise<NonNullable<T>> {
+    return this.waitFor(
+      (v): v is NonNullable<T> => v !== null && v !== undefined
+    );
+  }
+
   reactSubscribe = (cb: () => void) => {
     if (this.isPoisoned) {
       throw this.poisonedError;

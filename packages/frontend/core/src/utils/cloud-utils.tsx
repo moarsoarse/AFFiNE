@@ -1,49 +1,7 @@
 import { apis } from '@affine/electron-api';
-import {
-  generateRandUTF16Chars,
-  getBaseUrl,
-  OAuthProviderType,
-  SPAN_ID_BYTES,
-  TRACE_ID_BYTES,
-  traceReporter,
-} from '@affine/graphql';
+import { getBaseUrl, OAuthProviderType } from '@affine/graphql';
 
 import { CLOUD_WORKSPACE_CHANGED_BROADCAST_CHANNEL_KEY } from '../modules/workspace-engine';
-
-type TraceParams = {
-  startTime: string;
-  spanId: string;
-  traceId: string;
-  event: string;
-};
-
-function genTraceParams(): TraceParams {
-  const startTime = new Date().toISOString();
-  const spanId = generateRandUTF16Chars(SPAN_ID_BYTES);
-  const traceId = generateRandUTF16Chars(TRACE_ID_BYTES);
-  const event = 'signInCloud';
-  return { startTime, spanId, traceId, event };
-}
-
-function onResolveHandleTrace<T>(
-  res: Promise<T> | T,
-  params: TraceParams
-): Promise<T> | T {
-  const { startTime, spanId, traceId, event } = params;
-  traceReporter &&
-    traceReporter.cacheTrace(traceId, spanId, startTime, { event });
-  return res;
-}
-
-function onRejectHandleTrace<T>(
-  res: Promise<T> | T,
-  params: TraceParams
-): Promise<T> {
-  const { startTime, spanId, traceId, event } = params;
-  traceReporter &&
-    traceReporter.uploadTrace(traceId, spanId, startTime, { event });
-  return Promise.reject(res);
-}
 
 type Providers = 'credentials' | 'email' | OAuthProviderType;
 
@@ -52,16 +10,12 @@ export const signInCloud = async (
   credentials?: { email: string; password?: string },
   searchParams: Record<string, any> = {}
 ): Promise<Response | undefined> => {
-  const traceParams = genTraceParams();
-
   if (provider === 'credentials' || provider === 'email') {
     if (!credentials) {
       throw new Error('Invalid Credentials');
     }
 
-    return signIn(credentials, searchParams)
-      .then(res => onResolveHandleTrace(res, traceParams))
-      .catch(err => onRejectHandleTrace(err, traceParams));
+    return signIn(credentials, searchParams);
   } else if (OAuthProviderType[provider]) {
     if (environment.isDesktop) {
       await apis?.ui.openExternal(
@@ -113,23 +67,19 @@ async function signIn(
 }
 
 export const signOutCloud = async (redirectUri?: string) => {
-  const traceParams = genTraceParams();
-  return fetch(getBaseUrl() + '/api/auth/sign-out')
-    .then(result => {
-      if (result.ok) {
-        new BroadcastChannel(
-          CLOUD_WORKSPACE_CHANGED_BROADCAST_CHANNEL_KEY
-        ).postMessage(1);
+  return fetch(getBaseUrl() + '/api/auth/sign-out').then(result => {
+    if (result.ok) {
+      new BroadcastChannel(
+        CLOUD_WORKSPACE_CHANGED_BROADCAST_CHANNEL_KEY
+      ).postMessage(1);
 
-        if (redirectUri && location.href !== redirectUri) {
-          setTimeout(() => {
-            location.href = redirectUri;
-          }, 0);
-        }
+      if (redirectUri && location.href !== redirectUri) {
+        setTimeout(() => {
+          location.href = redirectUri;
+        }, 0);
       }
-      return onResolveHandleTrace(result, traceParams);
-    })
-    .catch(err => onRejectHandleTrace(err, traceParams));
+    }
+  });
 };
 
 export function buildRedirectUri(callbackUrl: string) {

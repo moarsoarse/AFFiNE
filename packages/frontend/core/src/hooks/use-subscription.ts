@@ -1,8 +1,9 @@
 import { useAsyncCallback } from '@affine/core/hooks/affine-async-hooks';
 import type { SubscriptionQuery } from '@affine/graphql';
 import { SubscriptionPlan, subscriptionQuery } from '@affine/graphql';
+import { useLiveData, useService } from '@toeverything/infra';
 
-import { useServerFeatures } from './affine/use-server-config';
+import { ServerConfigService } from '../modules/cloud';
 import { useQuery } from './use-query';
 
 export type Subscription = NonNullable<
@@ -17,7 +18,11 @@ const selector = (data: SubscriptionQuery, plan: SubscriptionPlan) =>
 export const useUserSubscription = (
   plan: SubscriptionPlan = SubscriptionPlan.Pro
 ) => {
-  const { payment: hasPaymentFeature } = useServerFeatures();
+  const hasPaymentFeature = useLiveData(
+    useService(ServerConfigService)
+      .serverConfig.revalidateIfNeeded()
+      .features$.map(f => f?.payment)
+  );
   const { data, mutate } = useQuery(
     hasPaymentFeature ? { query: subscriptionQuery } : undefined
   );

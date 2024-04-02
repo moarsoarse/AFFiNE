@@ -5,8 +5,8 @@ import { NotificationCenter } from '@affine/component';
 import { AffineContext } from '@affine/component/context';
 import { GlobalLoading } from '@affine/component/global-loading';
 import { WorkspaceFallback } from '@affine/core/components/workspace';
-import { configureCommonModules } from '@affine/core/modules';
-import { configureBrowserStorageImpls } from '@affine/core/modules/storage';
+import { configureCommonModules, configureImpls } from '@affine/core/modules';
+import { configureAuthImpls } from '@affine/core/modules/auth';
 import {
   configureBrowserWorkspaceFlavours,
   configureIndexedDBWorkspaceEngineStorageProvider,
@@ -61,7 +61,8 @@ let languageLoadingPromise: Promise<void> | null = null;
 
 const framework = new Framework();
 configureCommonModules(framework);
-configureBrowserStorageImpls(framework);
+configureImpls(framework);
+configureAuthImpls(framework);
 configureBrowserWorkspaceFlavours(framework);
 configureIndexedDBWorkspaceEngineStorageProvider(framework);
 const frameworkProvider = framework.provider();

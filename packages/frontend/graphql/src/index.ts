@@ -2,7 +2,6 @@ export * from './error';
 export * from './fetcher';
 export * from './graphql';
 export * from './schema';
-export * from './utils';
 
 import { setupGlobal } from '@affine/env/global';
 
