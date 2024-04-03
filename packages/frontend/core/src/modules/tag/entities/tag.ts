@@ -1,16 +1,18 @@
 import type { Tag as TagSchema } from '@affine/env/filter';
-import type { PageRecordList } from '@toeverything/infra';
-import { LiveData } from '@toeverything/infra';
+import type { DocsService } from '@toeverything/infra';
+import { Entity, LiveData } from '@toeverything/infra';
 
-import type { WorkspaceLegacyProperties } from '../../workspace';
+import type { WorkspaceLegacyProperties } from '../../properties';
 import { tagColorMap } from './utils';
 
-export class Tag {
+export class Tag extends Entity<{ id: string }> {
+  id = this.props.id;
   constructor(
-    readonly id: string,
     private readonly properties: WorkspaceLegacyProperties,
-    private readonly pageRecordList: PageRecordList
-  ) {}
+    private readonly docs: DocsService
+  ) {
+    super();
+  }
 
   private readonly tagOption$ = this.properties.tagOptions$.map(
     tags => tags.find(tag => tag.id === this.id) as TagSchema
@@ -45,7 +47,7 @@ export class Tag {
   }
 
   tag(pageId: string) {
-    const pageRecord = this.pageRecordList.record$(pageId).value;
+    const pageRecord = this.docs.docRecordList.record$(pageId).value;
     if (!pageRecord) {
       return;
     }
@@ -55,7 +57,7 @@ export class Tag {
   }
 
   untag(pageId: string) {
-    const pageRecord = this.pageRecordList.record$(pageId).value;
+    const pageRecord = this.docs.docRecordList.record$(pageId).value;
     if (!pageRecord) {
       return;
     }
@@ -65,7 +67,7 @@ export class Tag {
   }
 
   readonly pageIds$ = LiveData.computed(get => {
-    const pages = get(this.pageRecordList.records$);
+    const pages = get(this.docs.docRecordList.records$);
     return pages
       .filter(page => get(page.meta$).tags?.includes(this.id))
       .map(page => page.id);

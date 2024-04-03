@@ -8,7 +8,7 @@ import { EdgelessIcon, PageIcon } from '@blocksuite/icons';
 import { type AnimateLayoutChanges, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import * as Collapsible from '@radix-ui/react-collapsible';
-import { PageRecordList, useLiveData, useService } from '@toeverything/infra';
+import { DocsService, useLiveData, useService } from '@toeverything/infra';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -35,7 +35,9 @@ export const FavouriteDocSidebarNavItem = ({
   const t = useAFFiNEI18N();
   const params = useParams();
   const linkActive = params.pageId === pageId;
-  const pageRecord = useLiveData(useService(PageRecordList).record$(pageId));
+  const pageRecord = useLiveData(
+    useService(DocsService).docRecordList.record$(pageId)
+  );
   const pageMode = useLiveData(pageRecord?.mode$);
 
   const icon = useMemo(() => {

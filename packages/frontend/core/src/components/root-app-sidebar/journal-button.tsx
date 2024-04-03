@@ -5,7 +5,11 @@ import {
 import type { DocCollection } from '@affine/core/shared';
 import { useAFFiNEI18N } from '@affine/i18n/hooks';
 import { TodayIcon, TomorrowIcon, YesterdayIcon } from '@blocksuite/icons';
-import { Doc, useServiceOptional } from '@toeverything/infra';
+import {
+  GlobalContextService,
+  useLiveData,
+  useService,
+} from '@toeverything/infra';
 import { useParams } from 'react-router-dom';
 
 import { MenuItem } from '../app-sidebar';
@@ -18,11 +22,13 @@ export const AppSidebarJournalButton = ({
   docCollection,
 }: AppSidebarJournalButtonProps) => {
   const t = useAFFiNEI18N();
-  const currentPage = useServiceOptional(Doc);
+  const currentPageId = useLiveData(
+    useService(GlobalContextService).globalContext.docId.$
+  );
   const { openToday } = useJournalRouteHelper(docCollection);
   const { journalDate, isJournal } = useJournalInfoHelper(
     docCollection,
-    currentPage?.id
+    currentPageId
   );
   const params = useParams();
   const isJournalActive = isJournal && !!params.pageId;

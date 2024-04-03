@@ -13,8 +13,12 @@ import { useServerBaseUrl } from '@affine/core/hooks/affine/use-server-config';
 import { WorkspaceFlavour } from '@affine/env/workspace';
 import { useAFFiNEI18N } from '@affine/i18n/hooks';
 import { ArrowRightSmallIcon } from '@blocksuite/icons';
-import type { PageMode } from '@toeverything/infra';
-import { Doc, useLiveData, useService } from '@toeverything/infra';
+import {
+  type DocMode,
+  DocService,
+  useLiveData,
+  useService,
+} from '@toeverything/infra';
 import { useCallback, useMemo, useState } from 'react';
 
 import { CloudSvg } from '../cloud-svg';
@@ -51,10 +55,8 @@ export const LocalSharePage = (props: ShareMenuProps) => {
 export const AffineSharePage = (props: ShareMenuProps) => {
   const {
     workspaceMetadata: { id: workspaceId },
-    currentPage,
   } = props;
-  const pageId = currentPage.id;
-  const page = useService(Doc);
+  const doc = useService(DocService).doc;
   const [showDisable, setShowDisable] = useState(false);
   const {
     isSharedPage,
@@ -62,9 +64,9 @@ export const AffineSharePage = (props: ShareMenuProps) => {
     changeShare,
     currentShareMode,
     disableShare,
-  } = useIsSharedPage(workspaceId, currentPage.id);
+  } = useIsSharedPage(workspaceId, doc.id);
 
-  const currentPageMode = useLiveData(page.mode$);
+  const currentPageMode = useLiveData(doc.mode$);
 
   const defaultMode = useMemo(() => {
     if (isSharedPage) {
@@ -74,11 +76,11 @@ export const AffineSharePage = (props: ShareMenuProps) => {
     // default to  page mode
     return currentPageMode;
   }, [currentPageMode, currentShareMode, isSharedPage]);
-  const [mode, setMode] = useState<PageMode>(defaultMode);
+  const [mode, setMode] = useState<DocMode>(defaultMode);
 
   const { sharingUrl, onClickCopyLink } = useSharingUrl({
     workspaceId,
-    pageId,
+    pageId: doc.id,
     urlType: 'share',
   });
   const baseUrl = useServerBaseUrl();
@@ -97,7 +99,7 @@ export const AffineSharePage = (props: ShareMenuProps) => {
   }, [disableShare]);
 
   const onShareModeChange = useCallback(
-    (value: PageMode) => {
+    (value: DocMode) => {
       setMode(value);
       if (isSharedPage) {
         changeShare(value);

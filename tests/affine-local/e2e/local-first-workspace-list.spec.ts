@@ -118,14 +118,12 @@ test('create multi workspace in the workspace list', async ({
     }
   );
   await page.mouse.up();
-  await page.waitForTimeout(1000);
   await page.reload();
   await openWorkspaceListModal(page);
 
   await page.waitForTimeout(1000);
   // check workspace list length
   {
-    await page.waitForTimeout(1000);
     const workspaceCards = page.getByTestId('workspace-card');
     expect(await workspaceCards.count()).toBe(3);
   }

@@ -9,8 +9,8 @@ import { Job } from '@blocksuite/store';
 import { Map as YMap } from 'yjs';
 
 import { getLatestVersions } from '../blocksuite/migration/blocksuite';
-import { PageRecordList } from '../page';
-import type { WorkspaceManager } from '../workspace';
+import { DocsService } from '../modules/doc/services/docs';
+import type { WorkspacesService } from '../modules/workspace/services/workspaces';
 import { replaceIdMiddleware } from './middleware';
 
 export function initEmptyPage(page: Doc, title?: string) {
@@ -43,11 +43,11 @@ export function initEmptyPage(page: Doc, title?: string) {
  * FIXME: Use exported json data to instead of building data.
  */
 export async function buildShowcaseWorkspace(
-  workspaceManager: WorkspaceManager,
+  workspacesService: WorkspacesService,
   flavour: WorkspaceFlavour,
   workspaceName: string
 ) {
-  const meta = await workspaceManager.createWorkspace(
+  const meta = await workspacesService.create(
     flavour,
     async (docCollection, blobStorage) => {
       docCollection.meta.setName(workspaceName);
@@ -103,17 +103,17 @@ export async function buildShowcaseWorkspace(
     }
   );
 
-  const { workspace, release } = workspaceManager.open(meta);
+  const { workspace, dispose } = workspacesService.open({ metadata: meta });
 
   await workspace.engine.waitForRootDocReady();
 
-  const pageRecordList = workspace.services.get(PageRecordList);
+  const docsService = workspace.scope.get(DocsService);
 
   // todo: find better way to do the following
   // perhaps put them into middleware?
   {
     // the "Write, Draw, Plan all at Once." page should be set to edgeless mode
-    const edgelessPage1 = pageRecordList.records$.value.find(
+    const edgelessPage1 = docsService.docRecordList.records$.value.find(
       p => p.title$.value === 'Write, Draw, Plan all at Once.'
     );
 
@@ -122,7 +122,7 @@ export async function buildShowcaseWorkspace(
     }
 
     // should jump to "Write, Draw, Plan all at Once." by default
-    const defaultPage = pageRecordList.records$.value.find(p =>
+    const defaultPage = docsService.docRecordList.records$.value.find(p =>
       p.title$.value.startsWith('Write, Draw, Plan all at Once.')
     );
 
@@ -132,7 +132,7 @@ export async function buildShowcaseWorkspace(
       });
     }
   }
-  release();
+  dispose();
   return meta;
 }
 

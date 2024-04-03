@@ -3,7 +3,7 @@ import { useAFFiNEI18N } from '@affine/i18n/hooks';
 import { EdgelessIcon, PageIcon } from '@blocksuite/icons';
 import type { DocCollection, DocMeta } from '@blocksuite/store';
 import * as Collapsible from '@radix-ui/react-collapsible';
-import { PageRecordList, useLiveData, useService } from '@toeverything/infra';
+import { DocsService, useLiveData, useService } from '@toeverything/infra';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -27,7 +27,9 @@ export const ReferencePage = ({
   const params = useParams();
   const active = params.pageId === pageId;
 
-  const pageRecord = useLiveData(useService(PageRecordList).record$(pageId));
+  const pageRecord = useLiveData(
+    useService(DocsService).docRecordList.record$(pageId)
+  );
   const pageMode = useLiveData(pageRecord?.mode$);
   const icon = useMemo(() => {
     return pageMode === 'edgeless' ? <EdgelessIcon /> : <PageIcon />;

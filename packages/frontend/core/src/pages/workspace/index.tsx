@@ -1,11 +1,11 @@
 import { useWorkspace } from '@affine/core/hooks/use-workspace';
 import type { Workspace } from '@toeverything/infra';
 import {
-  ServiceProviderContext,
+  FrameworkScope,
+  GlobalContextService,
   useLiveData,
   useService,
-  WorkspaceListService,
-  WorkspaceManager,
+  WorkspacesService,
 } from '@toeverything/infra';
 import type { ReactElement } from 'react';
 import { Suspense, useEffect, useMemo } from 'react';
@@ -17,7 +17,6 @@ import { WorkspaceFallback } from '../../components/workspace';
 import { WorkspaceLayout } from '../../layouts/workspace-layout';
 import { RightSidebarContainer } from '../../modules/right-sidebar';
 import { WorkbenchRoot } from '../../modules/workbench';
-import { CurrentWorkspaceService } from '../../modules/workspace/current-workspace';
 import { AllWorkspaceModals } from '../../providers/modal-provider';
 import { performanceRenderLogger } from '../../shared';
 import { PageNotFound } from '../404';
@@ -36,40 +35,39 @@ declare global {
 export const Component = (): ReactElement => {
   performanceRenderLogger.info('WorkspaceLayout');
 
-  const currentWorkspaceService = useService(CurrentWorkspaceService);
-
   const params = useParams();
 
-  const { workspaceList, loading: listLoading } = useLiveData(
-    useService(WorkspaceListService).status$
-  );
-  const workspaceManager = useService(WorkspaceManager);
+  const workspacesService = useService(WorkspacesService);
+  const listLoading = useLiveData(workspacesService.list.isLoading$);
+  const workspaces = useLiveData(workspacesService.list.workspaces$);
 
   const meta = useMemo(() => {
-    return workspaceList.find(({ id }) => id === params.workspaceId);
-  }, [workspaceList, params.workspaceId]);
+    return workspaces.find(({ id }) => id === params.workspaceId);
+  }, [workspaces, params.workspaceId]);
 
   const workspace = useWorkspace(meta);
+  const globalContext = useService(GlobalContextService).globalContext;
 
   useEffect(() => {
-    if (!workspace) {
-      currentWorkspaceService.closeWorkspace();
-      return undefined;
+    if (workspace) {
+      // for debug purpose
+      window.currentWorkspace = workspace ?? undefined;
+      window.dispatchEvent(
+        new CustomEvent('affine:workspace:change', {
+          detail: {
+            id: workspace.id,
+          },
+        })
+      );
+      localStorage.setItem('last_workspace_id', workspace.id);
+      globalContext.workspaceId.set(workspace.id);
+      return () => {
+        window.currentWorkspace = undefined;
+        globalContext.workspaceId.set(null);
+      };
     }
-    currentWorkspaceService.openWorkspace(workspace ?? null);
-
-    // for debug purpose
-    window.currentWorkspace = workspace;
-    window.dispatchEvent(
-      new CustomEvent('affine:workspace:change', {
-        detail: {
-          id: workspace.id,
-        },
-      })
-    );
-
-    localStorage.setItem('last_workspace_id', workspace.id);
-  }, [meta, workspaceManager, workspace, currentWorkspaceService]);
+    return;
+  }, [globalContext, meta, workspace]);
 
   //  avoid doing operation, before workspace is loaded
   const isRootDocReady =
@@ -86,15 +84,15 @@ export const Component = (): ReactElement => {
 
   if (!isRootDocReady) {
     return (
-      <ServiceProviderContext.Provider value={workspace.services}>
+      <FrameworkScope scope={workspace.scope}>
         <WorkspaceFallback key="workspaceLoading" />
         <AllWorkspaceModals />
-      </ServiceProviderContext.Provider>
+      </FrameworkScope>
     );
   }
 
   return (
-    <ServiceProviderContext.Provider value={workspace.services}>
+    <FrameworkScope scope={workspace.scope}>
       <Suspense fallback={<WorkspaceFallback key="workspaceFallback" />}>
         <AffineErrorBoundary height="100vh">
           <WorkspaceLayout>
@@ -104,6 +102,6 @@ export const Component = (): ReactElement => {
           </WorkspaceLayout>
         </AffineErrorBoundary>
       </Suspense>
-    </ServiceProviderContext.Provider>
+    </FrameworkScope>
   );
 };

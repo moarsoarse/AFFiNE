@@ -2,8 +2,7 @@ import { Menu } from '@affine/component/ui/menu';
 import {
   useLiveData,
   useService,
-  WorkspaceListService,
-  WorkspaceManager,
+  WorkspacesService,
 } from '@toeverything/infra';
 import { lazy, useEffect, useLayoutEffect, useState } from 'react';
 import type { LoaderFunction } from 'react-router-dom';
@@ -29,7 +28,8 @@ export const Component = () => {
   const [navigating, setNavigating] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const list = useLiveData(useService(WorkspaceListService).workspaceList$);
+  const workspacesService = useService(WorkspacesService);
+  const list = useLiveData(workspacesService.list.workspaces$);
 
   const { openPage } = useNavigateHelper();
 
@@ -46,18 +46,16 @@ export const Component = () => {
     setNavigating(true);
   }, [list, openPage]);
 
-  const workspaceManager = useService(WorkspaceManager);
-
   useEffect(() => {
     setCreating(true);
-    createFirstAppData(workspaceManager)
+    createFirstAppData(workspacesService)
       .catch(err => {
         console.error('Failed to create first app data', err);
       })
       .finally(() => {
         setCreating(false);
       });
-  }, [workspaceManager]);
+  }, [workspacesService]);
 
   if (navigating || creating) {
     return <WorkspaceFallback></WorkspaceFallback>;
