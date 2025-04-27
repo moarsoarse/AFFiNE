@@ -16,7 +16,7 @@ export const Divider = forwardRef<HTMLDivElement, DividerProps>(
     {
       orientation = 'horizontal',
       size = 'default',
-      dividerColor = 'var(--affine-border-color)',
+      dividerColor,
       style,
       className,
       ...otherProps
@@ -25,20 +25,18 @@ export const Divider = forwardRef<HTMLDivElement, DividerProps>(
   ) => {
     return (
       <div
+        data-divider
         ref={ref}
         className={clsx(
           styles.divider,
           {
             [styles.verticalDivider]: orientation === 'vertical',
-            [styles.thinner]:
-              size === 'thinner' && orientation === 'horizontal',
-            [styles.verticalThinner]:
-              size === 'thinner' && orientation === 'vertical',
+            [styles.thinner]: size === 'thinner',
           },
           className
         )}
         style={{
-          backgroundColor: dividerColor ? dividerColor : undefined,
+          borderColor: dividerColor ? dividerColor : undefined,
           ...style,
         }}
         {...otherProps}

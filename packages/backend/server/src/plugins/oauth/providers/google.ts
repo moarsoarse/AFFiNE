@@ -1,8 +1,8 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
-import { Config, URLHelper } from '../../../fundamentals';
-import { AutoRegisteredOAuthProvider } from '../register';
-import { OAuthProviderName } from '../types';
+import { InvalidOauthCallbackCode, URLHelper } from '../../../base';
+import { OAuthProviderName } from '../config';
+import { OAuthProvider } from './def';
 
 interface GoogleOAuthTokenResponse {
   access_token: string;
@@ -20,13 +20,10 @@ export interface UserInfo {
 }
 
 @Injectable()
-export class GoogleOAuthProvider extends AutoRegisteredOAuthProvider {
+export class GoogleOAuthProvider extends OAuthProvider {
   override provider = OAuthProviderName.Google;
 
-  constructor(
-    protected readonly AFFiNEConfig: Config,
-    private readonly url: URLHelper
-  ) {
+  constructor(private readonly url: URLHelper) {
     super();
   }
 
@@ -44,77 +41,65 @@ export class GoogleOAuthProvider extends AutoRegisteredOAuthProvider {
   }
 
   async getToken(code: string) {
-    try {
-      const response = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        body: this.url.stringify({
-          code,
-          client_id: this.config.clientId,
-          client_secret: this.config.clientSecret,
-          redirect_uri: this.url.link('/oauth/callback'),
-          grant_type: 'authorization_code',
-        }),
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      body: this.url.stringify({
+        code,
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+        redirect_uri: this.url.link('/oauth/callback'),
+        grant_type: 'authorization_code',
+      }),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
 
-      if (response.ok) {
-        const ghToken = (await response.json()) as GoogleOAuthTokenResponse;
+    if (response.ok) {
+      const ghToken = (await response.json()) as GoogleOAuthTokenResponse;
 
-        return {
-          accessToken: ghToken.access_token,
-          refreshToken: ghToken.refresh_token,
-          expiresAt: new Date(Date.now() + ghToken.expires_in * 1000),
-          scope: ghToken.scope,
-        };
-      } else {
-        throw new Error(
-          `Server responded with non-success code ${
-            response.status
-          }, ${JSON.stringify(await response.json())}`
-        );
+      return {
+        accessToken: ghToken.access_token,
+        refreshToken: ghToken.refresh_token,
+        expiresAt: new Date(Date.now() + ghToken.expires_in * 1000),
+        scope: ghToken.scope,
+      };
+    } else {
+      const body = await response.text();
+      if (response.status < 500) {
+        throw new InvalidOauthCallbackCode({ status: response.status, body });
       }
-    } catch (e) {
-      throw new HttpException(
-        `Failed to get access_token, err: ${(e as Error).message}`,
-        HttpStatus.BAD_REQUEST
+      throw new Error(
+        `Server responded with non-success status ${response.status}, body: ${body}`
       );
     }
   }
 
   async getUser(token: string) {
-    try {
-      const response = await fetch(
-        'https://www.googleapis.com/oauth2/v2/userinfo',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const user = (await response.json()) as UserInfo;
-
-        return {
-          id: user.id,
-          avatarUrl: user.picture,
-          email: user.email,
-        };
-      } else {
-        throw new Error(
-          `Server responded with non-success code ${
-            response.status
-          } ${await response.text()}`
-        );
+    const response = await fetch(
+      'https://www.googleapis.com/oauth2/v2/userinfo',
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       }
-    } catch (e) {
-      throw new HttpException(
-        `Failed to get user information, err: ${(e as Error).stack}`,
-        HttpStatus.BAD_REQUEST
+    );
+
+    if (response.ok) {
+      const user = (await response.json()) as UserInfo;
+
+      return {
+        id: user.id,
+        avatarUrl: user.picture,
+        email: user.email,
+      };
+    } else {
+      throw new Error(
+        `Server responded with non-success code ${
+          response.status
+        } ${await response.text()}`
       );
     }
   }

@@ -1,28 +1,45 @@
 import { createHash } from 'node:crypto';
 
-import { Injectable, PayloadTooLargeException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
-import { QuotaManagementService } from '../../core/quota';
 import {
   type BlobInputType,
+  BlobQuotaExceeded,
+  CallMetric,
   Config,
   type FileUpload,
+  OnEvent,
+  readBuffer,
   type StorageProvider,
   StorageProviderFactory,
-} from '../../fundamentals';
+  URLHelper,
+} from '../../base';
+import { QuotaService } from '../../core/quota';
 
 @Injectable()
 export class CopilotStorage {
-  public readonly provider: StorageProvider;
+  public provider!: StorageProvider;
 
   constructor(
     private readonly config: Config,
+    private readonly url: URLHelper,
     private readonly storageFactory: StorageProviderFactory,
-    private readonly quota: QuotaManagementService
-  ) {
-    this.provider = this.storageFactory.create('copilot');
+    private readonly quota: QuotaService
+  ) {}
+
+  @OnEvent('config.init')
+  async onConfigInit() {
+    this.provider = this.storageFactory.create(this.config.copilot.storage);
   }
 
+  @OnEvent('config.changed')
+  async onConfigChanged(event: Events['config.changed']) {
+    if (event.updates?.copilot?.storage) {
+      this.provider = this.storageFactory.create(this.config.copilot.storage);
+    }
+  }
+
+  @CallMetric('ai', 'blob_put')
   async put(
     userId: string,
     workspaceId: string,
@@ -31,54 +48,37 @@ export class CopilotStorage {
   ) {
     const name = `${userId}/${workspaceId}/${key}`;
     await this.provider.put(name, blob);
-    if (this.config.node.dev) {
+    if (!env.prod) {
       // return image base64url for dev environment
       return `data:image/png;base64,${blob.toString('base64')}`;
     }
-    return `${this.config.baseUrl}/api/copilot/blob/${name}`;
+    return this.url.link(`/api/copilot/blob/${name}`);
   }
 
-  async get(userId: string, workspaceId: string, key: string) {
-    return this.provider.get(`${userId}/${workspaceId}/${key}`);
+  @CallMetric('ai', 'blob_get')
+  async get(
+    userId: string,
+    workspaceId: string,
+    key: string,
+    signedUrl?: boolean
+  ) {
+    return this.provider.get(`${userId}/${workspaceId}/${key}`, signedUrl);
   }
 
+  @CallMetric('ai', 'blob_delete')
   async delete(userId: string, workspaceId: string, key: string) {
-    return this.provider.delete(`${userId}/${workspaceId}/${key}`);
+    await this.provider.delete(`${userId}/${workspaceId}/${key}`);
   }
 
+  @CallMetric('ai', 'blob_upload')
   async handleUpload(userId: string, blob: FileUpload) {
-    const checkExceeded = await this.quota.getQuotaCalculator(userId);
+    const checkExceeded = await this.quota.getUserQuotaCalculator(userId);
 
     if (checkExceeded(0)) {
-      throw new PayloadTooLargeException(
-        'Storage or blob size limit exceeded.'
-      );
+      throw new BlobQuotaExceeded();
     }
-    const buffer = await new Promise<Buffer>((resolve, reject) => {
-      const stream = blob.createReadStream();
-      const chunks: Uint8Array[] = [];
-      stream.on('data', chunk => {
-        chunks.push(chunk);
 
-        // check size after receive each chunk to avoid unnecessary memory usage
-        const bufferSize = chunks.reduce((acc, cur) => acc + cur.length, 0);
-        if (checkExceeded(bufferSize)) {
-          reject(
-            new PayloadTooLargeException('Storage or blob size limit exceeded.')
-          );
-        }
-      });
-      stream.on('error', reject);
-      stream.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-
-        if (checkExceeded(buffer.length)) {
-          reject(new PayloadTooLargeException('Storage limit exceeded.'));
-        } else {
-          resolve(buffer);
-        }
-      });
-    });
+    const buffer = await readBuffer(blob.createReadStream(), checkExceeded);
 
     return {
       buffer,
@@ -86,6 +86,7 @@ export class CopilotStorage {
     };
   }
 
+  @CallMetric('ai', 'blob_proxy_remote_url')
   async handleRemoteLink(userId: string, workspaceId: string, link: string) {
     const response = await fetch(link);
     const buffer = new Uint8Array(await response.arrayBuffer());

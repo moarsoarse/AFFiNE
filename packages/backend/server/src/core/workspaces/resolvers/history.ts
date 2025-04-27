@@ -12,10 +12,11 @@ import {
 import type { SnapshotHistory } from '@prisma/client';
 
 import { CurrentUser } from '../../auth';
-import { DocHistoryManager } from '../../doc';
+import { PgWorkspaceDocStorageAdapter } from '../../doc';
+import { AccessController } from '../../permission';
 import { DocID } from '../../utils/doc';
-import { PermissionService } from '../permission';
-import { Permission, WorkspaceType } from '../types';
+import { WorkspaceType } from '../types';
+import { EditorType } from './workspace';
 
 @ObjectType()
 class DocHistoryType implements Partial<SnapshotHistory> {
@@ -27,13 +28,16 @@ class DocHistoryType implements Partial<SnapshotHistory> {
 
   @Field(() => GraphQLISODateTime)
   timestamp!: Date;
+
+  @Field(() => EditorType, { nullable: true })
+  editor!: EditorType | null;
 }
 
 @Resolver(() => WorkspaceType)
 export class DocHistoryResolver {
   constructor(
-    private readonly historyManager: DocHistoryManager,
-    private readonly permission: PermissionService
+    private readonly workspace: PgWorkspaceDocStorageAdapter,
+    private readonly ac: AccessController
   ) {}
 
   @ResolveField(() => [DocHistoryType])
@@ -47,21 +51,20 @@ export class DocHistoryResolver {
   ): Promise<DocHistoryType[]> {
     const docId = new DocID(guid, workspace.id);
 
-    if (docId.isWorkspace) {
-      throw new Error('Invalid guid for listing doc histories.');
-    }
+    const histories = await this.workspace.listDocHistories(
+      workspace.id,
+      docId.guid,
+      { before: timestamp.getTime(), limit: take }
+    );
 
-    return this.historyManager
-      .list(workspace.id, docId.guid, timestamp, take)
-      .then(rows =>
-        rows.map(({ timestamp }) => {
-          return {
-            workspaceId: workspace.id,
-            id: docId.guid,
-            timestamp,
-          };
-        })
-      );
+    return histories.map(history => {
+      return {
+        workspaceId: workspace.id,
+        id: docId.guid,
+        timestamp: new Date(history.timestamp),
+        editor: history.editor,
+      };
+    });
   }
 
   @Mutation(() => Date)
@@ -73,17 +76,15 @@ export class DocHistoryResolver {
   ): Promise<Date> {
     const docId = new DocID(guid, workspaceId);
 
-    if (docId.isWorkspace) {
-      throw new Error('Invalid guid for recovering doc from history.');
-    }
+    await this.ac.user(user.id).doc(docId).assert('Doc.Update');
 
-    await this.permission.checkPagePermission(
+    await this.workspace.rollbackDoc(
       docId.workspace,
       docId.guid,
-      user.id,
-      Permission.Write
+      timestamp.getTime(),
+      user.id
     );
 
-    return this.historyManager.recover(docId.workspace, docId.guid, timestamp);
+    return timestamp;
   }
 }

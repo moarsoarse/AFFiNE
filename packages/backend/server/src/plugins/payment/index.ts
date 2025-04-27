@@ -1,30 +1,56 @@
-import { ServerFeature } from '../../core/config';
+import './config';
+
+import { Module } from '@nestjs/common';
+
+import { ServerConfigModule } from '../../core';
 import { FeatureModule } from '../../core/features';
-import { Plugin } from '../registry';
-import { SubscriptionResolver, UserSubscriptionResolver } from './resolver';
-import { ScheduleManager } from './schedule';
+import { MailModule } from '../../core/mail';
+import { PermissionModule } from '../../core/permission';
+import { QuotaModule } from '../../core/quota';
+import { UserModule } from '../../core/user';
+import { WorkspaceModule } from '../../core/workspaces';
+import { StripeWebhookController } from './controller';
+import { SubscriptionCronJobs } from './cron';
+import { LicenseController } from './license/controller';
+import {
+  SelfhostTeamSubscriptionManager,
+  UserSubscriptionManager,
+  WorkspaceSubscriptionManager,
+} from './manager';
+import { QuotaOverride } from './quota';
+import {
+  SubscriptionResolver,
+  UserSubscriptionResolver,
+  WorkspaceSubscriptionResolver,
+} from './resolver';
 import { SubscriptionService } from './service';
-import { StripeProvider } from './stripe';
+import { StripeFactory, StripeProvider } from './stripe';
 import { StripeWebhook } from './webhook';
 
-@Plugin({
-  name: 'payment',
-  imports: [FeatureModule],
+@Module({
+  imports: [
+    FeatureModule,
+    QuotaModule,
+    UserModule,
+    PermissionModule,
+    WorkspaceModule,
+    MailModule,
+    ServerConfigModule,
+  ],
   providers: [
-    ScheduleManager,
+    StripeFactory,
     StripeProvider,
     SubscriptionService,
     SubscriptionResolver,
     UserSubscriptionResolver,
+    StripeWebhook,
+    UserSubscriptionManager,
+    WorkspaceSubscriptionManager,
+    SelfhostTeamSubscriptionManager,
+    SubscriptionCronJobs,
+    WorkspaceSubscriptionResolver,
+    QuotaOverride,
   ],
-  controllers: [StripeWebhook],
-  requires: [
-    'plugins.payment.stripe.keys.APIKey',
-    'plugins.payment.stripe.keys.webhookKey',
-  ],
-  contributesTo: ServerFeature.Payment,
-  if: config => config.flavor.graphql,
+  controllers: [StripeWebhookController, LicenseController],
 })
 export class PaymentModule {}
-
-export type { PaymentConfig } from './types';

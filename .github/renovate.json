@@ -7,68 +7,64 @@
     "**/bower_components/**",
     "**/vendor/**",
     "**/examples/**",
-    "**/__tests__/**",
-    "**/test/**",
-    "**/__fixtures__/**"
+    "**/__tests__/**"
   ],
   "packageRules": [
     {
-      "matchPackageNames": ["napi", "napi-build", "napi-derive"],
       "rangeStrategy": "replace",
-      "groupName": "napi-rs"
+      "groupName": "linter",
+      "matchPackageNames": ["/^eslint/", "/^@typescript-eslint/"]
     },
     {
-      "matchPackagePatterns": ["^eslint", "^@typescript-eslint"],
-      "rangeStrategy": "replace",
-      "groupName": "linter"
-    },
-    {
-      "matchPackagePatterns": ["^@nestjs"],
-      "rangeStrategy": "replace",
-      "groupName": "nestjs"
-    },
-    {
-      "matchPackagePatterns": ["^@opentelemetry"],
-      "rangeStrategy": "replace",
-      "groupName": "opentelemetry"
-    },
-    {
-      "matchPackageNames": [
-        "@prisma/client",
-        "@prisma/instrumentation",
-        "prisma"
-      ],
-      "rangeStrategy": "replace",
-      "groupName": "prisma"
-    },
-    {
-      "matchPackagePatterns": ["^@electron-forge"],
-      "rangeStrategy": "replace",
-      "groupName": "electron-forge"
-    },
-    {
-      "matchPackageNames": ["oxlint"],
+      "matchDepNames": ["oxlint"],
       "rangeStrategy": "replace",
       "groupName": "oxlint"
     },
     {
-      "groupName": "blocksuite-canary",
-      "matchPackagePatterns": ["^@blocksuite"],
-      "excludePackageNames": ["@blocksuite/icons"],
-      "rangeStrategy": "replace",
-      "followTag": "canary"
+      "groupName": "all non-major rust dependencies",
+      "groupSlug": "all-minor-patch",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchManagers": ["cargo"]
+    },
+    {
+      "groupName": "all non-major npm dependencies",
+      "groupSlug": "all-minor-patch",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["*", "!/^@blocksuite//", "!/oxlint/"]
     },
     {
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch",
-      "matchPackagePatterns": ["*"],
-      "excludePackagePatterns": ["^@blocksuite/", "oxlint"],
-      "matchUpdateTypes": ["minor", "patch"]
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchManagers": [
+        "dockerfile",
+        "github-actions",
+        "helmv3",
+        "helm-values",
+        "gradle-wrapper",
+        "gradle",
+        "docker-compose",
+        "devcontainer",
+        "cocoapods",
+        "bundler"
+      ]
     },
     {
-      "matchPackagePatterns": ["*"],
-      "rangeStrategy": "replace",
-      "excludePackagePatterns": ["^@blocksuite/"]
+      "groupName": "rust toolchain",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["rustc"]
+    },
+    {
+      "groupName": "nestjs",
+      "matchPackageNames": ["/^@nestjs/"]
+    },
+    {
+      "groupName": "opentelemetry",
+      "matchPackageNames": [
+        "/^@opentelemetry/",
+        "/^@google-cloud\/opentelemetry-/"
+      ]
     }
   ],
   "commitMessagePrefix": "chore: ",
@@ -79,5 +75,17 @@
   "lockFileMaintenance": {
     "enabled": true,
     "extends": ["schedule:weekly"]
-  }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^rust-toolchain\\.toml?$"],
+      "matchStrings": [
+        "channel\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)\""
+      ],
+      "depNameTemplate": "rustc",
+      "packageNameTemplate": "rust-lang/rust",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
 }

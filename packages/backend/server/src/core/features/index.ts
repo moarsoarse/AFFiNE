@@ -1,25 +1,20 @@
 import { Module } from '@nestjs/common';
 
-import { EarlyAccessType, FeatureManagementService } from './management';
-import { FeatureService } from './service';
+import {
+  AdminFeatureManagementResolver,
+  UserFeatureResolver,
+} from './resolver';
+import { EarlyAccessType, FeatureService } from './service';
 
-/**
- * Feature module provider pre-user feature flag management.
- * includes:
- * - feature query/update/permit
- * - feature statistics
- */
 @Module({
-  providers: [FeatureService, FeatureManagementService],
-  exports: [FeatureService, FeatureManagementService],
+  providers: [
+    UserFeatureResolver,
+    AdminFeatureManagementResolver,
+    FeatureService,
+  ],
+  exports: [FeatureService],
 })
 export class FeatureModule {}
 
-export {
-  type CommonFeature,
-  commonFeatureSchema,
-  FeatureKind,
-  Features,
-  FeatureType,
-} from './types';
-export { EarlyAccessType, FeatureManagementService, FeatureService };
+export { EarlyAccessType, FeatureService };
+export { AvailableUserFeatureConfig } from './types';

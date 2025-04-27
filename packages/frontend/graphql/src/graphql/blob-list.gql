@@ -1,3 +1,0 @@
-query listBlobs($workspaceId: String!) {
-  listBlobs(workspaceId: $workspaceId)
-}

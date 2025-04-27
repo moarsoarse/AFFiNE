@@ -1,6 +1,6 @@
+import { UserFriendlyError } from '@affine/error';
 import {
   gqlFetcherFactory,
-  GraphQLError,
   type GraphQLQuery,
   type QueryOptions,
   type QueryResponse,
@@ -8,7 +8,6 @@ import {
 import { fromPromise, Service } from '@toeverything/infra';
 import type { Observable } from 'rxjs';
 
-import { BackendError } from '../error';
 import { AuthService } from './auth';
 import type { FetchService } from './fetch';
 
@@ -38,16 +37,14 @@ export class GraphQLService extends Service {
   ): Promise<QueryResponse<Query>> => {
     try {
       return await this.rawGql(options);
-    } catch (err) {
-      if (err instanceof Array) {
-        for (const error of err) {
-          if (error instanceof GraphQLError && error.extensions?.code === 403) {
-            this.framework.get(AuthService).session.revalidate();
-          }
-        }
-        throw new BackendError(new Error('Graphql Error'));
+    } catch (anyError) {
+      const error = UserFriendlyError.fromAny(anyError);
+
+      if (error.isStatus(401)) {
+        this.framework.get(AuthService).session.revalidate();
       }
-      throw err;
+
+      throw error;
     }
   };
 }

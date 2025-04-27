@@ -1,10 +1,10 @@
-import { FavoriteItemsAdapter } from '@affine/core/modules/properties';
+import { CompatibleFavoriteItemsAdapter } from '@affine/core/modules/favorite';
 import type { Tag } from '@affine/core/modules/tag';
 import { TagService } from '@affine/core/modules/tag';
-import { useAFFiNEI18N } from '@affine/i18n/hooks';
-import { FavoritedIcon, FavoriteIcon } from '@blocksuite/icons';
-import type { DocMeta } from '@blocksuite/store';
-import { useLiveData, useService } from '@toeverything/infra';
+import { useI18n } from '@affine/i18n';
+import type { DocMeta } from '@blocksuite/affine/store';
+import { FavoritedIcon, FavoriteIcon } from '@blocksuite/icons/rc';
+import { LiveData, useLiveData, useService } from '@toeverything/infra';
 import { type ReactNode, useMemo } from 'react';
 
 import * as styles from './group-definitions.css';
@@ -25,21 +25,18 @@ const GroupLabel = ({
 }) => (
   <div className={styles.groupLabelWrapper}>
     {icon}
-    <div
-      className={styles.groupLabel}
-      data-testid={`group-label-${id}-${count}`}
-    >
+    <div className={styles.groupLabel} data-testid={`group-label-${id}`}>
       {label}
     </div>
     <div className={styles.pageCount}>{` · ${count}`}</div>
   </div>
 );
 
-// todo: optimize date matchers
+// TODO(@JimmFly): optimize date matchers
 export const useDateGroupDefinitions = <T extends ListItem>(
   key: DateKey
 ): ItemGroupDefinition<T>[] => {
-  const t = useAFFiNEI18N();
+  const t = useI18n();
   return useMemo(
     () => [
       {
@@ -128,23 +125,53 @@ const GroupTagLabel = ({ tag, count }: { tag: Tag; count: number }) => {
 };
 export const useTagGroupDefinitions = (): ItemGroupDefinition<ListItem>[] => {
   const tagList = useService(TagService).tagList;
-  const tags = useLiveData(tagList.tags$);
+  const sortedTagsLiveData$ = useMemo(
+    () =>
+      LiveData.computed(get =>
+        get(tagList.tags$)
+          .slice()
+          .sort((a, b) => get(a.value$).localeCompare(get(b.value$)))
+      ),
+    [tagList.tags$]
+  );
+  const tags = useLiveData(sortedTagsLiveData$);
+
+  const t = useI18n();
+
+  const untagged = useMemo(
+    () => ({
+      id: 'Untagged',
+      label: (count: number) => (
+        <GroupLabel
+          id="Untagged"
+          label={t['com.affine.page.display.grouping.group-by-tag.untagged']()}
+          count={count}
+        />
+      ),
+      match: (item: ListItem) =>
+        (item as DocMeta).tags ? !(item as DocMeta).tags.length : false,
+    }),
+    [t]
+  );
+
   return useMemo(() => {
-    return tags.map(tag => ({
-      id: tag.id,
-      label: count => {
-        return <GroupTagLabel tag={tag} count={count} />;
-      },
-      match: item => (item as DocMeta).tags?.includes(tag.id),
-    }));
-  }, [tags]);
+    return tags
+      .map(tag => ({
+        id: tag.id,
+        label: (count: number) => {
+          return <GroupTagLabel tag={tag} count={count} />;
+        },
+        match: (item: ListItem) => (item as DocMeta).tags?.includes(tag.id),
+      }))
+      .concat(untagged);
+  }, [tags, untagged]);
 };
 
 export const useFavoriteGroupDefinitions = <
   T extends ListItem,
 >(): ItemGroupDefinition<T>[] => {
-  const t = useAFFiNEI18N();
-  const favAdapter = useService(FavoriteItemsAdapter);
+  const t = useI18n();
+  const favAdapter = useService(CompatibleFavoriteItemsAdapter);
   const favourites = useLiveData(favAdapter.favorites$);
   return useMemo(
     () => [
@@ -193,7 +220,7 @@ export const usePageItemGroupDefinitions = () => {
       none: undefined,
 
       // add more here later
-      // todo: some page group definitions maybe dynamic
+      // todo(@JimmFly): some page group definitions maybe dynamic
     };
     return itemGroupDefinitions[workspaceProperties.groupBy];
   }, [

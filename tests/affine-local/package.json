@@ -1,13 +1,16 @@
 {
   "name": "@affine-test/affine-local",
   "private": true,
+  "type": "module",
   "scripts": {
     "e2e": "yarn playwright test"
   },
   "devDependencies": {
-    "@affine-test/fixtures": "workspace:*",
     "@affine-test/kit": "workspace:*",
-    "@playwright/test": "^1.43.0"
+    "@affine-tools/cli": "workspace:*",
+    "@affine-tools/utils": "workspace:*",
+    "@playwright/test": "=1.51.1",
+    "webpack": "^5.98.0"
   },
-  "version": "0.14.0"
+  "version": "0.21.0"
 }

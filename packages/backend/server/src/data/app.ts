@@ -1,24 +1,18 @@
 import { Module } from '@nestjs/common';
 
-import { AppModule as BusinessAppModule } from '../app.module';
-import { ConfigModule } from '../fundamentals/config';
+import { FunctionalityModules } from '../app.module';
 import { CreateCommand, NameQuestion } from './commands/create';
+import { ImportConfigCommand } from './commands/import';
 import { RevertCommand, RunCommand } from './commands/run';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      doc: {
-        manager: {
-          enableUpdateAutoMerging: false,
-        },
-      },
-      metrics: {
-        enabled: false,
-      },
-    }),
-    BusinessAppModule,
+  imports: FunctionalityModules,
+  providers: [
+    NameQuestion,
+    CreateCommand,
+    RunCommand,
+    RevertCommand,
+    ImportConfigCommand,
   ],
-  providers: [NameQuestion, CreateCommand, RunCommand, RevertCommand],
 })
 export class CliAppModule {}

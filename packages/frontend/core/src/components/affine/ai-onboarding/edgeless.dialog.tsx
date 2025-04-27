@@ -1,21 +1,18 @@
-import { Button, FlexWrapper, notify } from '@affine/component';
-import { openSettingModalAtom } from '@affine/core/atoms';
+import { notify } from '@affine/component';
+import { type Notification } from '@affine/component/ui/notification';
 import { SubscriptionService } from '@affine/core/modules/cloud';
-import { WorkspaceFlavour } from '@affine/env/workspace';
-import { useAFFiNEI18N } from '@affine/i18n/hooks';
-import { AiIcon } from '@blocksuite/icons';
-import {
-  DocService,
-  useLiveData,
-  useServices,
-  WorkspaceService,
-} from '@toeverything/infra';
+import { WorkspaceDialogService } from '@affine/core/modules/dialogs';
+import { EditorService } from '@affine/core/modules/editor';
+import { useI18n } from '@affine/i18n';
+import { track } from '@affine/track';
+import { AiIcon } from '@blocksuite/icons/rc';
+import { useLiveData, useService, useServices } from '@toeverything/infra';
 import { cssVar } from '@toeverything/theme';
-import { useAtomValue, useSetAtom } from 'jotai';
 import Lottie from 'lottie-react';
 import { useTheme } from 'next-themes';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
+import { toggleEdgelessAIOnboarding } from './apis';
 import * as styles from './edgeless.dialog.css';
 import mouseTrackDark from './lottie/edgeless/mouse-track-dark.json';
 import mouseTrackLight from './lottie/edgeless/mouse-track-light.json';
@@ -24,7 +21,6 @@ import {
   localNotifyId$,
   showAIOnboardingGeneral$,
 } from './state';
-import type { BaseAIOnboardingDialogProps } from './type';
 
 const EdgelessOnboardingAnimation = () => {
   const { resolvedTheme } = useTheme();
@@ -45,44 +41,68 @@ const EdgelessOnboardingAnimation = () => {
   );
 };
 
-export const AIOnboardingEdgeless = ({
-  onDismiss,
-}: BaseAIOnboardingDialogProps) => {
-  const { workspaceService, docService, subscriptionService } = useServices({
-    WorkspaceService,
-    DocService,
+export const AIOnboardingEdgeless = () => {
+  const { subscriptionService, editorService } = useServices({
     SubscriptionService,
+    EditorService,
   });
 
-  const t = useAFFiNEI18N();
+  const t = useI18n();
   const notifyId = useLiveData(edgelessNotifyId$);
   const generalAIOnboardingOpened = useLiveData(showAIOnboardingGeneral$);
   const aiSubscription = useLiveData(subscriptionService.subscription.ai$);
-  const settingModalOpen = useAtomValue(openSettingModalAtom);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const isCloud =
-    workspaceService.workspace.flavour === WorkspaceFlavour.AFFINE_CLOUD;
+  const workspaceDialogService = useService(WorkspaceDialogService);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const setSettingModal = useSetAtom(openSettingModalAtom);
-
-  const doc = docService.doc;
-  const mode = useLiveData(doc.mode$);
+  const mode = useLiveData(editorService.editor.mode$);
 
   const goToPricingPlans = useCallback(() => {
-    setSettingModal({
-      open: true,
+    track.$.aiOnboarding.dialog.viewPlans();
+    workspaceDialogService.open('setting', {
       activeTab: 'plans',
       scrollAnchor: 'aiPricingPlan',
     });
-  }, [setSettingModal]);
+  }, [workspaceDialogService]);
+
+  const actions = useMemo(() => {
+    const result: NonNullable<Notification['actions']> = [
+      {
+        key: 'get-started',
+        label: (
+          <span className={styles.getStartedButtonText}>
+            {t['com.affine.ai-onboarding.edgeless.get-started']()}
+          </span>
+        ),
+        onClick: () => {
+          toggleEdgelessAIOnboarding(false);
+        },
+      },
+    ];
+
+    if (!aiSubscription) {
+      result.push({
+        key: 'purchase',
+        label: (
+          <span className={styles.purchaseButtonText}>
+            {t['com.affine.ai-onboarding.edgeless.purchase']()}
+          </span>
+        ),
+        onClick: () => {
+          goToPricingPlans();
+          toggleEdgelessAIOnboarding(false);
+        },
+      });
+    }
+    return result;
+  }, [aiSubscription, goToPricingPlans, t]);
 
   useEffect(() => {
-    if (settingModalOpen.open) return;
     if (generalAIOnboardingOpened) return;
     if (notifyId) return;
     if (mode !== 'edgeless') return;
-    if (!isCloud) return;
-    clearTimeout(timeoutRef.current);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
     timeoutRef.current = setTimeout(() => {
       // try to close local onboarding
       notify.dismiss(localNotifyId$.value);
@@ -95,54 +115,14 @@ export const AIOnboardingEdgeless = ({
           iconColor: cssVar('processingColor'),
           thumb: <EdgelessOnboardingAnimation />,
           alignMessage: 'icon',
-          onDismiss,
-          footer: (
-            <FlexWrapper marginTop={8} justifyContent="flex-end" gap="12px">
-              <Button
-                onClick={() => {
-                  notify.dismiss(id);
-                  onDismiss();
-                }}
-                type="plain"
-                className={styles.actionButton}
-              >
-                <span className={styles.getStartedButtonText}>
-                  {t['com.affine.ai-onboarding.edgeless.get-started']()}
-                </span>
-              </Button>
-              {aiSubscription ? null : (
-                <Button
-                  className={styles.actionButton}
-                  type="plain"
-                  onClick={() => {
-                    goToPricingPlans();
-                    notify.dismiss(id);
-                    onDismiss();
-                  }}
-                >
-                  <span className={styles.purchaseButtonText}>
-                    {t['com.affine.ai-onboarding.edgeless.purchase']()}
-                  </span>
-                </Button>
-              )}
-            </FlexWrapper>
-          ),
+          onDismiss: () => toggleEdgelessAIOnboarding(false),
+          actions,
         },
         { duration: 1000 * 60 * 10 }
       );
       edgelessNotifyId$.next(id);
     }, 1000);
-  }, [
-    aiSubscription,
-    generalAIOnboardingOpened,
-    goToPricingPlans,
-    isCloud,
-    mode,
-    notifyId,
-    onDismiss,
-    settingModalOpen,
-    t,
-  ]);
+  }, [actions, generalAIOnboardingOpened, mode, notifyId, t]);
 
   return null;
 };

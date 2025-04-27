@@ -1,23 +1,23 @@
 import { DebugLogger } from '@affine/debug';
 import type { GetWorkspacePublicPagesQuery } from '@affine/graphql';
-import type { GlobalCache, WorkspaceService } from '@toeverything/infra';
 import {
-  backoffRetry,
   catchErrorInto,
   effect,
   Entity,
+  exhaustMapWithTrailing,
   fromPromise,
   LiveData,
   onComplete,
   onStart,
+  smartRetry,
 } from '@toeverything/infra';
-import { EMPTY, mergeMap, switchMap } from 'rxjs';
+import { tap } from 'rxjs';
 
-import { isBackendError, isNetworkError } from '../../cloud';
+import type { GlobalCache } from '../../storage';
+import type { WorkspaceService } from '../../workspace';
 import type { ShareDocsStore } from '../stores/share-docs';
 
-type ShareDocListType =
-  GetWorkspacePublicPagesQuery['workspace']['publicPages'];
+type ShareDocListType = GetWorkspacePublicPagesQuery['workspace']['publicDocs'];
 
 export const logger = new DebugLogger('affine:share-doc-list');
 
@@ -35,23 +35,16 @@ export class ShareDocsList extends Entity {
   }
 
   revalidate = effect(
-    switchMap(() =>
-      fromPromise(signal =>
-        this.store.getWorkspacesShareDocs(
+    exhaustMapWithTrailing(() =>
+      fromPromise(signal => {
+        return this.store.getWorkspacesShareDocs(
           this.workspaceService.workspace.id,
           signal
-        )
-      ).pipe(
-        backoffRetry({
-          when: isNetworkError,
-          count: Infinity,
-        }),
-        backoffRetry({
-          when: isBackendError,
-        }),
-        mergeMap(list => {
+        );
+      }).pipe(
+        smartRetry(),
+        tap(list => {
           this.cache.set('share-docs', list);
-          return EMPTY;
         }),
         catchErrorInto(this.error$, err =>
           logger.error('revalidate share docs error', err)
@@ -65,4 +58,8 @@ export class ShareDocsList extends Entity {
       )
     )
   );
+
+  override dispose(): void {
+    this.revalidate.unsubscribe();
+  }
 }

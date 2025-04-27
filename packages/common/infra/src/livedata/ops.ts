@@ -1,3 +1,4 @@
+import { UserFriendlyError } from '@affine/error';
 import {
   catchError,
   connect,
@@ -18,6 +19,7 @@ import {
   timer,
 } from 'rxjs';
 
+import { MANUALLY_STOP } from '../utils';
 import type { LiveData } from './livedata';
 
 /**
@@ -108,7 +110,7 @@ export function fromPromise<T>(
         subscriber.error(error);
       });
 
-    return () => abortController.abort('Aborted');
+    return () => abortController.abort(MANUALLY_STOP);
   });
 }
 
@@ -139,6 +141,32 @@ export function backoffRetry<T>({
           const d = Math.pow(2, retryIndex - 1) * delay;
           return timer(Math.min(d, maxDelay));
         },
+      })
+    );
+}
+
+export function smartRetry<T>({
+  count = 3,
+  delay = 200,
+  maxDelay = 15000,
+}: {
+  count?: number;
+  delay?: number;
+  maxDelay?: number;
+} = {}) {
+  return (obs$: Observable<T>) =>
+    obs$.pipe(
+      backoffRetry({
+        when: UserFriendlyError.isNetworkError,
+        count: Infinity,
+        delay,
+        maxDelay,
+      }),
+      backoffRetry({
+        when: UserFriendlyError.notNetworkError,
+        count,
+        delay,
+        maxDelay,
       })
     );
 }

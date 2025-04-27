@@ -9,7 +9,6 @@ import { waitForEditorLoad } from '@affine-test/kit/utils/page-logic';
 import { clickUserInfoCard } from '@affine-test/kit/utils/setting';
 import {
   clickSideBarAllPageButton,
-  clickSideBarCurrentWorkspaceBanner,
   clickSideBarSettingButton,
   clickSideBarUseAvatar,
 } from '@affine-test/kit/utils/sidebar';
@@ -19,8 +18,7 @@ import { expect } from '@playwright/test';
 test('can open login modal in workspace list', async ({ page }) => {
   await openHomePage(page);
   await waitForEditorLoad(page);
-  await clickSideBarCurrentWorkspaceBanner(page);
-  await page.getByTestId('cloud-signin-button').click({
+  await page.getByTestId('sidebar-user-avatar').click({
     delay: 200,
   });
   await expect(page.getByTestId('auth-modal')).toBeVisible();
@@ -36,7 +34,7 @@ test.describe('login first', () => {
 
   test.beforeEach(async ({ page }) => {
     user = await createRandomUser();
-    await loginUser(page, user.email);
+    await loginUser(page, user);
   });
 
   test('exit successfully and re-login', async ({ page }) => {
@@ -87,8 +85,8 @@ test.describe('login first', () => {
     {
       await clickSideBarSettingButton(page);
       const locator = page.getByTestId('user-info-card');
-      expect(locator.getByText(user.email)).toBeTruthy();
-      expect(locator.getByText(user.name)).toBeTruthy();
+      await expect(locator.getByText(user.email)).toBeVisible();
+      await expect(locator.getByText(user.name)).toBeVisible();
       await locator.click({
         delay: 50,
       });
@@ -105,8 +103,8 @@ test.describe('login first', () => {
     {
       await clickSideBarSettingButton(page);
       const locator = page.getByTestId('user-info-card');
-      expect(locator.getByText(user.email)).toBeTruthy();
-      expect(locator.getByText(newName)).toBeTruthy();
+      await expect(locator.getByText(user.email)).toBeVisible();
+      await expect(locator.getByText(newName)).toBeVisible();
     }
   });
 });

@@ -4,11 +4,9 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+import type { PropertyDeclaration } from 'lit';
 import type React from 'react';
 
-const DEV_MODE = process.env.NODE_ENV !== 'production';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DistributiveOmit<T, K extends string | number | symbol> = T extends any
   ? K extends keyof T
     ? Omit<T, K>
@@ -38,7 +36,6 @@ export type WebComponentProps<I extends HTMLElement> = React.DetailedHTMLProps<
 > &
   ElementProps<I>;
 
-// eslint-disable-next-line @typescript-eslint/ban-types
 type EmptyObject = {};
 
 /**
@@ -166,6 +163,7 @@ const setProperty = <E extends Element>(
   name: string,
   value: unknown,
   old: unknown,
+  elementProperties?: Map<string, PropertyDeclaration>,
   events?: EventNames
 ) => {
   const event = events?.[name];
@@ -176,6 +174,15 @@ const setProperty = <E extends Element>(
   }
   // But don't dirty check properties; elements are assumed to do this.
   node[name as keyof E] = value as E[keyof E];
+
+  if (elementProperties && elementProperties.has(name)) {
+    const property = elementProperties.get(name);
+    if (property?.attribute) {
+      const attributeName =
+        property.attribute === true ? name : property.attribute;
+      node.setAttribute(attributeName, value as string);
+    }
+  }
 
   // This block is to replicate React's behavior for attributes of native
   // elements where `undefined` or `null` values result in attributes being
@@ -236,7 +243,7 @@ export const createComponent = <
 }: Options<I, E>): ReactWebComponent<I, E> => {
   const eventProps = new Set(Object.keys(events ?? {}));
 
-  if (DEV_MODE) {
+  if (BUILD_CONFIG.debug) {
     for (const p of reservedReactProperties) {
       if (p in elementClass.prototype && !(p in HTMLElement.prototype)) {
         // Note, this effectively warns only for `ref` since the other
@@ -256,7 +263,9 @@ export const createComponent = <
 
   const ReactComponent = React.forwardRef<I, Props>((props, ref) => {
     const containerRef = React.useRef<HTMLElement | null>(null);
-    const prevPropsRef = React.useRef<Props | null>(null);
+    const prevPropsRef = React.useRef<React.PropsWithoutRef<Props> | null>(
+      null
+    );
     const elementRef = React.useRef<I | null>(null);
 
     // Props to be passed to React.createElement
@@ -274,8 +283,6 @@ export const createComponent = <
         ref.current = element;
       }
     }
-
-    const element = elementRef.current;
 
     for (const [k, v] of Object.entries(props)) {
       if (reservedReactProperties.has(k)) {
@@ -300,8 +307,16 @@ export const createComponent = <
         setProperty(
           elementRef.current,
           prop,
+          // @ts-expect-error: prop is a key of props
           props[prop],
+          // @ts-expect-error: prop is a key of props
           prevPropsRef.current ? prevPropsRef.current[prop] : undefined,
+          'elementProperties' in elementClass
+            ? (elementClass.elementProperties as Map<
+                string,
+                PropertyDeclaration
+              >)
+            : undefined,
           events
         );
       }
@@ -314,14 +329,13 @@ export const createComponent = <
 
     React.useLayoutEffect(() => {
       const container = containerRef.current;
-      if (!container) {
+      const element = elementRef.current;
+      if (!container || !element) {
         return;
       }
+      if (element.isConnected) return;
       container.append(element);
-      return () => {
-        element.remove();
-      };
-    }, [element]);
+    }, []);
 
     return React.createElement(tagName, {
       ...reactProps,

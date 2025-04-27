@@ -1,4 +1,5 @@
 import { DebugLogger } from '@affine/debug';
+import { type ReadonlySignal, type Signal, signal } from '@preact/signals-core';
 import type {
   InteropObservable,
   Observer,
@@ -22,6 +23,8 @@ import {
   switchMap,
   throttleTime,
 } from 'rxjs';
+
+import { shallowEqual } from '../utils/shallow-equal';
 
 const logger = new DebugLogger('livedata');
 
@@ -136,6 +139,21 @@ export class LiveData<T = unknown>
     );
 
     return data$;
+  }
+
+  static fromSignal<T>(signal: ReadonlySignal<T>): LiveData<T> {
+    return LiveData.from(
+      new Observable(subscriber => {
+        const unsubscribe = signal.subscribe(value => {
+          subscriber.next(value);
+        });
+
+        return () => {
+          unsubscribe();
+        };
+      }),
+      signal.value
+    );
   }
 
   private static GLOBAL_COMPUTED_RECURSIVE_COUNT = 0;
@@ -284,6 +302,19 @@ export class LiveData<T = unknown>
     this.next(v);
   }
 
+  private _signal: Signal<T> | undefined;
+
+  get signal(): ReadonlySignal<T> {
+    if (!this._signal) {
+      this._signal = signal(this.value);
+      this.subscribe(v => {
+        // oxlint-disable-next-line no-non-null-assertion
+        this._signal!.value = v;
+      });
+    }
+    return this._signal;
+  }
+
   next = (v: T) => {
     if (this.isPoisoned) {
       throw this.poisonedError;
@@ -334,10 +365,36 @@ export class LiveData<T = unknown>
     return sub$;
   }
 
+  /**
+   * same as map, but do shallow equal check before emit
+   */
+  selector<R>(selector: (v: T) => R): LiveData<R> {
+    const sub$ = LiveData.from(
+      new Observable<R>(subscriber => {
+        let last: any = undefined;
+        return this.subscribe({
+          next: v => {
+            const data = selector(v);
+            if (!shallowEqual(last, data)) {
+              subscriber.next(data);
+            }
+            last = data;
+          },
+          complete: () => {
+            sub$.complete();
+          },
+        });
+      }),
+      undefined as R // is safe
+    );
+
+    return sub$;
+  }
+
   distinctUntilChanged(comparator?: (previous: T, current: T) => boolean) {
     return LiveData.from(
       this.pipe(distinctUntilChanged(comparator)),
-      null as any
+      null as T
     );
   }
 
@@ -345,13 +402,12 @@ export class LiveData<T = unknown>
     duration: number,
     { trailing = true, leading = true }: ThrottleConfig = {}
   ) {
-    return LiveData.from(
+    return LiveData.from<T>(
       this.pipe(throttleTime(duration, undefined, { trailing, leading })),
       null as any
     );
   }
 
-  // eslint-disable-next-line rxjs/finnish
   asObservable(): Observable<T> {
     return new Observable<T>(subscriber => {
       return this.subscribe(subscriber);
@@ -393,7 +449,7 @@ export class LiveData<T = unknown>
   override pipe(...args: any[]) {
     return new Observable(subscriber => {
       this.ops$.next('watch');
-      // eslint-disable-next-line prefer-spread
+
       const subscription = this.raw$.pipe
         .apply(this.raw$, args as any)
         .subscribe(subscriber);
@@ -449,12 +505,17 @@ export class LiveData<T = unknown>
     ) as any;
   }
 
+  static flat<T>(v: T): Flat<LiveData<T>> {
+    return new LiveData(v).flat();
+  }
+
   waitFor(predicate: (v: T) => unknown, signal?: AbortSignal): Promise<T> {
     return new Promise((resolve, reject) => {
       const subscription = this.subscribe(v => {
         if (predicate(v)) {
           resolve(v as any);
-          setImmediate(() => {
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          Promise.resolve().then(() => {
             subscription.unsubscribe();
           });
         }
@@ -491,7 +552,8 @@ export class LiveData<T = unknown>
       throw this.poisonedError;
     }
     this.ops$.next('watch');
-    setImmediate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises -- never throw
+    Promise.resolve().then(() => {
       this.ops$.next('unwatch');
     });
     return this.raw$.value;
@@ -515,8 +577,8 @@ export type LiveDataOperation = 'set' | 'get' | 'watch' | 'unwatch';
 export type Unwrap<T> =
   T extends LiveData<infer Z>
     ? Unwrap<Z>
-    : T extends LiveData<infer A>[]
-      ? Unwrap<A>[]
+    : T extends readonly [...infer Elements]
+      ? { [K in keyof Elements]: Unwrap<Elements[K]> }
       : T;
 
 export type Flat<T> = T extends LiveData<infer P> ? LiveData<Unwrap<P>> : T;

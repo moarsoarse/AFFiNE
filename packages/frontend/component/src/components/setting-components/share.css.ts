@@ -29,6 +29,10 @@ export const wrapper = style({
     },
   },
 });
+export const wrapperDisabled = style({
+  opacity: 0.5,
+  pointerEvents: 'none',
+});
 globalStyle(`${wrapper} .title`, {
   fontSize: cssVar('fontSm'),
   fontWeight: 600,

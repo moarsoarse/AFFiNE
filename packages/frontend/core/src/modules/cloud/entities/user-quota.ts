@@ -1,6 +1,5 @@
 import type { QuotaQuery } from '@affine/graphql';
 import {
-  backoffRetry,
   catchErrorInto,
   effect,
   Entity,
@@ -9,17 +8,19 @@ import {
   LiveData,
   onComplete,
   onStart,
+  smartRetry,
 } from '@toeverything/infra';
 import { cssVar } from '@toeverything/theme';
 import bytes from 'bytes';
-import { EMPTY, map, mergeMap } from 'rxjs';
+import { map, tap } from 'rxjs';
 
-import { isBackendError, isNetworkError } from '../error';
 import type { AuthService } from '../services/auth';
 import type { UserQuotaStore } from '../stores/user-quota';
 
 export class UserQuota extends Entity {
-  quota$ = new LiveData<NonNullable<QuotaQuery['currentUser']>['quota']>(null);
+  quota$ = new LiveData<NonNullable<QuotaQuery['currentUser']>['quota'] | null>(
+    null
+  );
   /** Used storage in bytes */
   used$ = new LiveData<number | null>(null);
   /** Formatted used storage */
@@ -30,9 +31,6 @@ export class UserQuota extends Entity {
   max$ = this.quota$.map(quota => (quota ? quota.storageQuota : null));
   /** Maximum storage limit formatted */
   maxFormatted$ = this.max$.map(max => (max ? bytes.format(max) : null));
-
-  aiActionLimit$ = new LiveData<number | 'unlimited' | null>(null);
-  aiActionUsed$ = new LiveData<number | null>(null);
 
   /** Percentage of storage used */
   percent$ = LiveData.computed(get => {
@@ -76,34 +74,20 @@ export class UserQuota extends Entity {
           if (!accountId) {
             return; // no quota if no user
           }
-          const { quota, aiQuota, used } =
-            await this.store.fetchUserQuota(signal);
+          const { quota, used } = await this.store.fetchUserQuota(signal);
 
-          return { quota, aiQuota, used };
+          return { quota, used };
         }).pipe(
-          backoffRetry({
-            when: isNetworkError,
-            count: Infinity,
-          }),
-          backoffRetry({
-            when: isBackendError,
-          }),
-          mergeMap(data => {
+          smartRetry(),
+          tap(data => {
             if (data) {
-              const { aiQuota, quota, used } = data;
+              const { quota, used } = data;
               this.quota$.next(quota);
               this.used$.next(used);
-              this.aiActionUsed$.next(aiQuota.used);
-              this.aiActionLimit$.next(
-                aiQuota.limit === null ? 'unlimited' : aiQuota.limit
-              ); // fix me: unlimited status
             } else {
               this.quota$.next(null);
               this.used$.next(null);
-              this.aiActionUsed$.next(null);
-              this.aiActionLimit$.next(null);
             }
-            return EMPTY;
           }),
           catchErrorInto(this.error$),
           onStart(() => this.isRevalidating$.next(true)),
@@ -119,8 +103,6 @@ export class UserQuota extends Entity {
   reset() {
     this.quota$.next(null);
     this.used$.next(null);
-    this.aiActionUsed$.next(null);
-    this.aiActionLimit$.next(null);
     this.error$.next(null);
     this.isRevalidating$.next(false);
   }

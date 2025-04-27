@@ -1,3 +1,0 @@
-mutation deleteBlob($workspaceId: String!, $hash: String!) {
-  deleteBlob(workspaceId: $workspaceId, hash: $hash)
-}

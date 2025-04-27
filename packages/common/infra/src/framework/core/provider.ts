@@ -55,7 +55,7 @@ export abstract class FrameworkProvider {
   getOptional = <T>(
     identifier: GeneralIdentifier<T>,
     options?: ResolveOptions
-  ): T | null => {
+  ): T | undefined => {
     return this.getRaw(parseIdentifier(identifier), {
       ...options,
       optional: true,
@@ -122,13 +122,15 @@ export class ComponentCachePool {
           try {
             i[Symbol.dispose]();
           } catch (err) {
-            setImmediate(() => {
+            // make a uncaught exception
+            setTimeout(() => {
               throw err;
-            });
+            }, 0);
           }
         }
       }
     }
+    this.cache.clear();
   }
 
   [Symbol.dispose]() {
@@ -317,5 +319,64 @@ export class BasicFrameworkProvider extends FrameworkProvider {
     }
     this.disposed = true;
     this.cache.dispose();
+    this.eventBus.dispose();
+  }
+}
+
+export class FrameworkStackProvider extends FrameworkProvider {
+  public readonly stack: FrameworkProvider[];
+  public readonly collection: Framework;
+  public readonly eventBus: EventBus;
+
+  constructor(providers: FrameworkProvider[]) {
+    if (providers.length === 0) {
+      throw new Error('FrameworkStackProvider must have at least one provider');
+    }
+    super();
+    this.stack = [...providers];
+
+    // use the collection and eventBus from the first provider
+    this.collection = this.stack[0].collection;
+    this.eventBus = this.stack[0].eventBus;
+  }
+
+  get scope(): FrameworkScopeStack {
+    return this.stack[0]?.scope || [];
+  }
+
+  getRaw(identifier: IdentifierValue, options?: ResolveOptions): any {
+    for (const provider of this.stack) {
+      const service = provider.getRaw(identifier, {
+        ...options,
+        optional: true,
+      });
+      if (service) {
+        return service;
+      }
+    }
+
+    if (options?.optional) {
+      return undefined;
+    }
+
+    throw new ComponentNotFoundError(identifier);
+  }
+
+  getAllRaw(
+    identifier: IdentifierValue,
+    options?: ResolveOptions
+  ): Map<ComponentVariant, any> {
+    for (const provider of this.stack) {
+      const components = provider.getAllRaw(identifier, options);
+      if (components.size > 0) {
+        return components;
+      }
+    }
+
+    return new Map();
+  }
+
+  dispose(): void {
+    // No need to handle the disposal of providers in the stack, as they are passed in externally
   }
 }

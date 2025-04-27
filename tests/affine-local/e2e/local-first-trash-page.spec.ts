@@ -6,6 +6,7 @@ import {
   getPageOperationButton,
   waitForEditorLoad,
 } from '@affine-test/kit/utils/page-logic';
+import { getCurrentDocIdFromUrl } from '@affine-test/kit/utils/url';
 import { expect } from '@playwright/test';
 
 test('New a page , then delete it in all pages, finally find it in trash', async ({
@@ -17,25 +18,24 @@ test('New a page , then delete it in all pages, finally find it in trash', async
   await clickNewPageButton(page);
   await getBlockSuiteEditorTitle(page).click();
   await getBlockSuiteEditorTitle(page).fill('this is a new page to delete');
-  const newPageId = page.url().split('/').reverse()[0];
+  const newPageId = getCurrentDocIdFromUrl(page);
   await page.getByTestId('all-pages').click();
-  const cell = page.getByRole('cell', {
-    name: 'this is a new page to delete',
-  });
-  expect(cell).not.toBeUndefined();
+  const allPages = page.getByTestId('virtualized-page-list');
+  const cell = allPages.getByText('this is a new page to delete');
+  await expect(cell).toBeVisible();
 
   await getPageOperationButton(page, newPageId).click();
   const deleteBtn = page.getByTestId('move-to-trash');
   await deleteBtn.click();
-  const confirmTip = page.getByText('Delete page?');
-  expect(confirmTip).not.toBeUndefined();
+  const confirmTip = page.getByRole('dialog', { name: 'Delete doc?' });
+  await expect(confirmTip).toBeVisible();
 
   await page.getByRole('button', { name: 'Delete' }).click();
 
   await page.getByTestId('trash-page').click();
-  expect(
-    page.getByRole('cell', { name: 'this is a new page to delete' })
-  ).not.toBeUndefined();
+  await expect(
+    allPages.getByText('this is a new page to delete')
+  ).toBeVisible();
   const currentWorkspace = await workspace.current();
 
   expect(currentWorkspace.meta.flavour).toContain('local');
